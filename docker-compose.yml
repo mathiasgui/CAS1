@@ -1,0 +1,175 @@
+services:
+  db_wordpress:
+    image: mysql:latest
+    container_name: db_wordpress
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: wordpress
+      MYSQL_ROOT_PASSWORD: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+    volumes: 
+      - db_wordpress:/var/lib/mysql
+    networks:
+      - app-network
+
+  wordpress:
+    depends_on: 
+      - db_wordpress
+    image: wordpress:latest
+    container_name: wordpress
+    restart: unless-stopped
+    environment:
+      WORDPRESS_DB_HOST: db_wordpress:3306
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - wordpress:/var/www/html
+    ports:
+      - '8000:80'
+    networks:
+      - app-network
+
+  db_moodle:
+    image: bitnami/mariadb:latest
+    container_name: db_moodle
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: moodle
+      MARIADB_USER: moodle
+      MARIADB_PASSWORD: moodle
+      MARIADB_DATABASE: moodle
+    volumes:
+      - db_moodle:/bitnami/mariadb
+    networks:
+      - app-network
+
+  moodle:
+    image: bitnami/moodle:latest
+    container_name: moodle
+    restart: unless-stopped
+    depends_on:
+      - db_moodle
+    ports:
+      - '38443:8443'
+      - '38080:8080'
+    environment:
+      MOODLE_DATABASE_HOST: db_moodle
+      MOODLE_DATABASE_PORT_NUMBER: 3306
+      MOODLE_DATABASE_USER: moodle
+      MOODLE_DATABASE_PASSWORD: moodle  
+      MOODLE_DATABASE_NAME: moodle
+    volumes:
+      - moodle:/bitnami/moodle
+      - moodledata:/bitnami/moodledata
+    networks:
+      - app-network
+
+  openldap:
+    image: docker.io/osixia/openldap:latest
+    container_name: ldapserver
+    hostname: ldapserver
+    ports:
+      - "389:389"
+      - "636:636"
+    volumes:
+      - ./ldif:/openldap/ldif
+    environment:
+      - LDAP_ORGANISATION=cpnv-cas1
+      - LDAP_DOMAIN=cpnv-cas1.ch
+      - LDAP_ADMIN_USERNAME=admin
+      - LDAP_ADMIN_PASSWORD=pass123
+      - LDAP_CONFIG_PASSWORD=pass123
+      - "LDAP_BASE_DN=dc=cpnv-cas1,dc=ch"
+      - LDAP_READONLY_USER=true
+      - LDAP_READONLY_USER_USERNAME=user-ro
+      - LDAP_READONLY_USER_PASSWORD=pass123
+      - LDAP_SEED_INTERNAL_LDIF_PATH=/openldap/ldif
+    networks:
+      - app-network
+
+
+  phpldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: phpldapadmin
+    hostname: phpldapadmin
+    ports:
+      - "8010:80"
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: ldapserver
+      PHPLDAPADMIN_HTTPS: false
+    depends_on:
+      - openldap
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    depends_on:
+      - wordpress
+      - moodle
+    ports:
+      - "80:80"      
+      - "443:443"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./config/nginx/ssl.conf:/etc/nginx/includes/ssl.conf
+      - ./certificates/wildcard.crt:/etc/ssl/certs/nginx/wildcard.crt
+      - ./certificates/wildcard.key:/etc/ssl/certs/nginx/wildcard.key
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+      POSTGRES_DB: keycloak
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  keycloak:
+    depends_on:
+      - postgres
+    image: quay.io/keycloak/keycloak:latest
+    container_name: local_keycloak
+    command: start-dev --https-port=8443 --https-certificate-file=/opt/keycloak/conf/cert.crt --https-certificate-key-file=/opt/keycloak/conf/cert.key
+    restart: unless-stopped
+    volumes:
+      - ./certificates/wildcard.crt:/opt/keycloak/conf/cert.crt
+      - ./certificates/wildcard.key:/opt/keycloak/conf/cert.key
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_SCHEMA: public
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/cert.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/conf/cert.key
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin  
+    ports:
+      - "8443:8443"
+    networks:
+      - app-network
+
+volumes:
+  wordpress:
+  moodle:
+  moodledata:
+  db_wordpress:
+  db_moodle:
+  postgres_data:
+  ldap_data:
+  ldap_config:
+
+networks:
+  app-network:
+ 

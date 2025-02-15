@@ -1,0 +1,12 @@
+# Import using the PHP my Admin
+
+dn: cn=user03,ou=People,dc=cpnv-cas1,dc=ch
+objectClass: person
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: top
+cn: user03
+givenname: User03
+sn: user03
+uid: user03
+userpassword: Pa$$w0rd
